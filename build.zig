@@ -7,9 +7,11 @@ pub fn build(b: *std.Build) void {
         inline for (&.{ "x86", "x86_64", "aarch64" }) |arch| {
             const exe = b.addExecutable(.{
                 .name = "test-" ++ arch,
-                .root_source_file = b.path("src/main.zig"),
-                .target = b.resolveTargetQuery(.{ .cpu_arch = getCpuArch(arch), .os_tag = .windows, .abi = .gnu }),
-                .optimize = optimize,
+                .root_module = b.addModule("test-" ++ arch, .{
+                    .root_source_file = b.path("src/main.zig"),
+                    .target = b.resolveTargetQuery(.{ .cpu_arch = getCpuArch(arch), .os_tag = .windows, .abi = .gnu }),
+                    .optimize = optimize,
+                }),
             });
             b.installArtifact(exe);
         }
@@ -19,11 +21,13 @@ pub fn build(b: *std.Build) void {
 
     {
         inline for (&.{ "x86", "x86_64", "aarch64" }) |arch| {
-            const dll = b.addSharedLibrary(.{
+            const dll = b.addLibrary(.{
                 .name = "sc-" ++ arch,
-                .root_source_file = b.path("src/main.zig"),
-                .target = b.resolveTargetQuery(.{ .cpu_arch = getCpuArch(arch), .os_tag = .windows, .abi = .msvc }),
-                .optimize = .ReleaseSmall,
+                .root_module = b.addModule("sc-" ++ arch, .{
+                    .root_source_file = b.path("src/main.zig"),
+                    .target = b.resolveTargetQuery(.{ .cpu_arch = getCpuArch(arch), .os_tag = .windows, .abi = .msvc }),
+                    .optimize = .ReleaseSmall,
+                }),
             });
             const install = b.addInstallArtifact(dll, .{});
             const c = GenShellCode.create(b, install);
@@ -36,9 +40,11 @@ pub fn build(b: *std.Build) void {
         inline for (&.{ "x86", "x86_64", "aarch64" }) |t| {
             const exe = b.addExecutable(.{
                 .name = "loader-" ++ t,
-                .root_source_file = b.path("src/loader.zig"),
-                .target = b.resolveTargetQuery(.{ .cpu_arch = getCpuArch(t), .os_tag = .windows, .abi = .gnu }),
-                .optimize = .ReleaseSmall,
+                .root_module = b.addModule("loader-" ++ t, .{
+                    .root_source_file = b.path("src/loader.zig"),
+                    .target = b.resolveTargetQuery(.{ .cpu_arch = getCpuArch(t), .os_tag = .windows, .abi = .gnu }),
+                    .optimize = .ReleaseSmall,
+                }),
             });
             loader.dependOn(&b.addInstallArtifact(exe, .{}).step);
         }
@@ -57,11 +63,11 @@ fn rva2ofs(comptime T: type, base: *anyopaque, rva: usize, is64: bool) T {
     var sh: [*c]win32.IMAGE_SECTION_HEADER = undefined;
     var shNum: usize = 0;
     if (is64) {
-        var nt64: *win32.IMAGE_NT_HEADERS64 = @alignCast(@ptrCast(nt));
+        var nt64: *win32.IMAGE_NT_HEADERS64 = @ptrCast(@alignCast(nt));
         sh = @ptrFromInt(@intFromPtr(&nt64.OptionalHeader) + nt64.FileHeader.SizeOfOptionalHeader);
         shNum = nt64.FileHeader.NumberOfSections;
     } else {
-        var nt32: *win32.IMAGE_NT_HEADERS32 = @alignCast(@ptrCast(nt));
+        var nt32: *win32.IMAGE_NT_HEADERS32 = @ptrCast(@alignCast(nt));
         sh = @ptrFromInt(@intFromPtr(&nt32.OptionalHeader) + nt32.FileHeader.SizeOfOptionalHeader);
         shNum = nt32.FileHeader.NumberOfSections;
     }
@@ -117,17 +123,17 @@ fn genShellCode(step: *std.Build.Step, make_options: std.Build.Step.MakeOptions)
             c.install.dest_sub_path,
             1024 * 64,
             null,
-            16,
+            std.mem.Alignment.@"16",
             null,
         ) catch unreachable;
         // get shellcode by resolve go goEnd symbol
         const nt = getNt(inst.ptr);
         var rva: u32 = 0;
         if (is64) {
-            const nt64: *win32.IMAGE_NT_HEADERS64 = @alignCast(@ptrCast(nt));
+            const nt64: *win32.IMAGE_NT_HEADERS64 = @ptrCast(@alignCast(nt));
             rva = nt64.OptionalHeader.DataDirectory[win32.IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
         } else {
-            const nt32: *win32.IMAGE_NT_HEADERS32 = @alignCast(@ptrCast(nt));
+            const nt32: *win32.IMAGE_NT_HEADERS32 = @ptrCast(@alignCast(nt));
             rva = nt32.OptionalHeader.DataDirectory[win32.IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
         }
 

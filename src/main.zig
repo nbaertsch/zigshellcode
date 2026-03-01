@@ -25,11 +25,11 @@ const apiAddr = struct {
     WinExec: ?*const fn (
         lpCmdLine: [*c]u8,
         UINT: windows.UINT,
-    ) callconv(windows.WINAPI) windows.UINT = null,
+    ) callconv(.winapi) windows.UINT = null,
 
     ExitProcess: ?*const fn (
         nExitCode: windows.LONG,
-    ) callconv(windows.WINAPI) void = null,
+    ) callconv(.winapi) void = null,
     fn ok(self: *Self) bool {
         inline for (@typeInfo(apiAddr).@"struct".fields) |field| {
             if (@field(self, field.name) == null) {
