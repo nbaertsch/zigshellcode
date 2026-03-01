@@ -3,8 +3,37 @@ const builtin = @import("builtin");
 const windows = std.os.windows;
 const win32 = @import("win32.zig");
 
+pub const DLL_PROCESS_ATTACH: windows.DWORD = 1;
+pub const DLL_PROCESS_DETACH: windows.DWORD = 0;
+pub const DLL_THREAD_ATTACH: windows.DWORD = 2;
+pub const DLL_THREAD_DETACH: windows.DWORD = 3;
+
 pub fn main() void {
     go();
+}
+
+pub export fn DllMain(hinstDLL: windows.HINSTANCE, dwReason: windows.DWORD, lpReserved: windows.LPVOID) callconv(.winapi) windows.BOOL {
+    // Suppress unused parameter warnings if you don't use them all
+    _ = hinstDLL;
+    _ = lpReserved;
+
+    switch (dwReason) {
+        DLL_PROCESS_ATTACH => {
+            go();
+        },
+        DLL_PROCESS_DETACH => {
+            // Code to run when the DLL is unloaded by a process
+        },
+        DLL_THREAD_ATTACH => {
+            // Code to run when a new thread is created
+        },
+        DLL_THREAD_DETACH => {
+            // Code to run when a thread is terminated
+        },
+        else => {},
+    }
+
+    return windows.TRUE;
 }
 
 pub export fn go() void {

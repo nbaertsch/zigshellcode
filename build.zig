@@ -22,11 +22,16 @@ pub fn build(b: *std.Build) void {
     {
         inline for (&.{ "x86", "x86_64", "aarch64" }) |arch| {
             const dll = b.addLibrary(.{
+                .linkage = .dynamic,
                 .name = "sc-" ++ arch,
                 .root_module = b.addModule("sc-" ++ arch, .{
                     .root_source_file = b.path("src/main.zig"),
                     .target = b.resolveTargetQuery(.{ .cpu_arch = getCpuArch(arch), .os_tag = .windows, .abi = .msvc }),
                     .optimize = .ReleaseSmall,
+                    .single_threaded = true,
+                    .pic = true,
+                    //.link_libc = true,
+                    .strip = true, // irrelevant since we carve shellcode.
                 }),
             });
             const install = b.addInstallArtifact(dll, .{});
@@ -98,12 +103,14 @@ fn rva2ofs(comptime T: type, base: *anyopaque, rva: usize, is64: bool) T {
 }
 
 fn readFile(filename: []const u8, allocator: std.mem.Allocator) []u8 {
-    var f = std.fs.cwd().openFile(filename, .{}) catch unreachable;
-    defer f.close();
-    var stream = std.ArrayList(u8).initCapacity(allocator, 512 * 1024) catch unreachable;
-    var fifo = std.fifo.LinearFifo(u8, .{ .Static = 1024 }).init();
-    fifo.pump(f.reader(), stream.writer()) catch unreachable;
-    return stream.toOwnedSlice() catch unreachable;
+    return std.fs.cwd().readFileAllocOptions(
+        allocator,
+        filename,
+        512 * 1024,
+        null,
+        std.mem.Alignment.@"16",
+        null,
+    ) catch unreachable;
 }
 
 fn genShellCode(step: *std.Build.Step, make_options: std.Build.Step.MakeOptions) anyerror!void {
@@ -118,14 +125,8 @@ fn genShellCode(step: *std.Build.Step, make_options: std.Build.Step.MakeOptions)
     {
         var dir = std.fs.cwd().openDir(step.owner.exe_dir, .{}) catch unreachable;
         defer dir.close();
-        const inst = dir.readFileAllocOptions(
-            allocator,
-            c.install.dest_sub_path,
-            1024 * 64,
-            null,
-            std.mem.Alignment.@"16",
-            null,
-        ) catch unreachable;
+        const dll_path = c.install.artifact.installed_path orelse @panic("install artifact path unavailable");
+        const inst = readFile(dll_path, allocator);
         // get shellcode by resolve go goEnd symbol
         const nt = getNt(inst.ptr);
         var rva: u32 = 0;
